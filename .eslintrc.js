@@ -1,7 +1,8 @@
 module.exports = {
   "extends": "google",
   "rules": {
-    "max-len": ["error", 120]
+    "max-len": ["error", 150],
+    "no-trailing-spaces": "off"
   }
 };
 // module.exports = {

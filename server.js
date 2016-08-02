@@ -54,7 +54,7 @@ app.get('/:fileName', function(req, res) {
     }
   };
 
-  res.sendFile('/public/' + req.params.fileName, options, function(err) {
+  res.sendFile('/resources/' + req.params.fileName, options, function(err) {
     if (err) {
       console.log(err);
       res.status(err.status).end();

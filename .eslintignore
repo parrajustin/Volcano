@@ -1,3 +1,5 @@
 public/three.js
 public/jquery.js
 public/bundle.js
+public/OrbitControls.js
+public/dat.gui.min.js
