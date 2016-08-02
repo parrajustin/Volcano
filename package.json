@@ -1,6 +1,6 @@
 {
   "name": "evv",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "earth quake visuzlization around a volcano",
   "main": "server.js",
   "scripts": {

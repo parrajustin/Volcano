@@ -1,13 +1,15 @@
 /* eslint no-unused-vars: ["warn"] guard-for-in: "off" */
-/* global THREE window document requestAnimationFrame Stats dat $ URIUtil*/
+/* global THREE window document requestAnimationFrame Stats dat $ Math*/
 
 var scene;
 var camera;
 var renderer;
 var stats;
-var vn;
-var url = "localhost/volcano.csv";
-var query;
+var vn; // volcano name and lat/long holder
+var url = "/volcano.csv";
+var query; // earthquake data
+var queryGeom = [];
+var originObject; // object to show elevatino of the volcano
 
 $.ajax( {
   url: url,
@@ -18,7 +20,7 @@ $.ajax( {
     var v = $.csv.toObjects( data );
     vn = {};
     for( var i = 0; i < v.length; i++ ) {
-      vn[v[i].name] = v[i].lat + "," + v[i].long;
+      vn[v[i].name] = v[i].lat + "," + v[i].long + "," + v[i].elev;
     }
   },
   error: function( xhr, status, err ) {
@@ -86,10 +88,16 @@ function init() {
   scene.add( object4 );
 
   var origin = new THREE.BoxGeometry( 1, 1, 1 );
-  var originObject = new THREE.Mesh( origin, new THREE.MeshLambertMaterial( {
+  originObject = new THREE.Mesh( origin, new THREE.MeshLambertMaterial( {
     color: Math.random() * 0xffffff
   } ) );
   scene.add( originObject );
+
+  var northObject = new THREE.Mesh( origin, new THREE.MeshLambertMaterial( {
+    color: 0xff0000
+  } ) );
+  northObject.position.x = 100;
+  scene.add( northObject );
 
   // for( var i = 0; i < 1500; i++ ) {
   //   var object = new THREE.Mesh( geometry, new THREE.MeshLambertMaterial( {
@@ -134,6 +142,7 @@ function init() {
   var TextObject = {
     Latitude: 34.5,
     Longitude: 131.6,
+    Elevation: 571,
     startDate: 2000,
     endDate: 2010,
     startMonth: 1,
@@ -147,8 +156,8 @@ function init() {
     startSec: 0,
     endSec: 0,
     play: 0,
-    radiusKM: 100,
-    VolcanoName: "34.5,131.6",
+    radiusDegrees: 5,
+    VolcanoName: "34.5,131.6,571",
     dateGet: function( val ) {
       if( val === 0 )
         return this.startDate.toString() + "%2D" + this.startMonth.toString() + "%2D" + this.startDay.toString();
@@ -160,19 +169,23 @@ function init() {
       return this.endHour.toString() + "%3A" + this.endMin.toString() + "%3A" + this.endSec.toString();
     },
     sendQuery: function() {
+      $( ".loading" ).css( "display", "block" );
       var s = "&starttime=" + this.dateGet( 0 ).toString() + "T" + this.timeGet( 0 ).toString() +
       "&endtime=" + this.dateGet( 1 ).toString() + "T" + this.timeGet( 1 ) +
-      "&latitude=" + this.Latitude + "&longitude=" + this.Longitude + "&maxradiuskm=" + this.radiusKM;
+      "&latitude=" + this.Latitude + "&longitude=" + this.Longitude + "&maxradius=" + this.radiusDegrees;
       console.log( s );
       s = "http://earthquake.usgs.gov/fdsnws/event/1/query?format=csv" + s;
       console.log( s );
+      var ref = this;
       $.ajax( {
         url: s,
         type: 'GET',
         async: false,
         success: function( data ) {
           query = $.csv.toObjects( data );
+          // TODO get rid of this console.log
           console.log( query );
+          createEarthquakes( ref );
         },
         error: function( xhr, status, err ) {
           console.error( this, status, err.toString() );
@@ -204,12 +217,14 @@ function init() {
   // == latitude == //
   dataFolder.add( text, "Latitude", -90, 90 ).step( 0.01 ).listen();
   dataFolder.add( text, "Longitude", -180, 180 ).step( 0.01 ).listen();
+  dataFolder.add( text, "Elevation", -6000, 6000 ).step( 0.01 ).listen();
   dataFolder.add( text, "VolcanoName", vn ).onChange( function( value ) {
     var temp = value.split( "," );
     text.Latitude = Number( temp[0] );
     text.Longitude = Number( temp[1] );
+    text.Elevation = Number( temp[2] );
   } );
-  dataFolder.add( text, "radiusKM" ).min( 0 );
+  dataFolder.add( text, "radiusDegrees" ).min( 0.1 ).max( 180 );
 
   // == YEAR == //
   var yearFolder = dataFolder.addFolder( 'Year' );
@@ -324,6 +339,77 @@ function init() {
 
   // ========================================= EVENTS ========================================= //
   window.addEventListener( 'resize', onResize, false );
+}
+
+/**
+ * This funciton will remove everyobject in the geo query array from the scene
+ */
+function cleanGeo() {
+  for( var i = 0; i < queryGeom.length; i++ ) {
+    var temp = queryGeom[i];
+    scene.remove( temp );
+    temp.geometry.dispose();
+  }
+  queryGeom = [];
+}
+
+/**
+ * This function's purpose is to create the objects for the three.js canvas
+ * @param  {Object} ref contains all the values the user inputs into the dat gui
+ */
+function createEarthquakes( ref ) {
+  // EACH DEGREE IS 111km
+
+  cleanGeo();
+  console.log( 'base : ' + ref.radiusDegrees + " " + ref.Latitude + " " + ref.Longitude );
+
+  var geometry = new THREE.SphereGeometry( 1, 50, 50 );
+  for( var i = ( query.length - 1 ); i >= 0; i-- ) {
+    var mat = new THREE.LineBasicMaterial( {
+      color: Math.random() * 0xffffff,
+      opacity: 1.0,
+      transparent: true,
+      alphaTest: 0
+    } );
+    var earthquake = new THREE.Mesh( geometry, mat );
+
+    // TODO Compress these math equation
+    var xOrigin = ref.Latitude;
+    var difX = query[i].latitude - xOrigin;
+    var max = ref.radiusDegrees;
+    var xAcutal = ( difX < 0 ? -1 : 1 ) * ( Math.abs( difX ) * 100 / max );
+
+    var zOrigin = ref.Longitude;
+    var difZ = query[i].longitude - zOrigin;
+    var zAcutal = ( difZ < 0 ? -1 : 1 ) * ( Math.abs( difZ ) * 100 / max );
+
+    var yOrigin = 0;
+    var difY = query[i].depth - yOrigin;
+    var maxY = 6000;
+    var yAcutal = ( difY < 0 ? -1 : 1 ) * ( Math.abs( difY ) * 100 / maxY );
+
+    earthquake.position.x = xAcutal;
+    earthquake.position.z = zAcutal;
+    earthquake.position.y = yAcutal;
+
+    // if( xAcutal > 100 || zAcutal > 100 ) {
+    //   console.log( xAcutal + " " + zAcutal );
+    //   console.log( query[i].latitude );
+    //   console.log( query[i].longitude );
+    // }
+
+    scene.add( earthquake );
+    queryGeom.push( earthquake );
+  }
+
+  var difV = ref.Elevation;
+  var maxV = 6000;
+  var vAcutal = ( difV < 0 ? -1 : 1 ) * ( Math.abs( difV ) * 100 / maxV );
+
+  originObject.position.y = vAcutal;
+
+  renderer.render( scene, camera );
+  $( ".loading" ).css( "display", "none" );
 }
 
 /**
