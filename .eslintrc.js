@@ -4,7 +4,16 @@ module.exports = {
     "max-len": ["error", 150],
     "no-trailing-spaces": "off",
     "space-in-parens": ["error", "always"],
-    "keyword-spacing": ["error", { "before": true, "after": false, "overrides": { "else": { "after": true } } }]
+    "array-bracket-spacing": ["error", "never"],
+    "keyword-spacing": ["error", {
+      "before": true,
+      "after": false,
+      "overrides": {
+        "else": {
+          "after": true
+        }
+      }
+    }]
   }
 };
 // module.exports = {

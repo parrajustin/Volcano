@@ -4,7 +4,7 @@
   "description": "earth quake visuzlization around a volcano",
   "main": "server.js",
   "scripts": {
-    "test": "NODE_ENV=development && npm run browserify && node server.js",
+    "test": "NODE_ENV=development && node server.js",
     "eslint": "eslint --init",
     "browserify": "browserify -t [ envify purge ] -t require-globify public/app.js -o public/bundle.js"
   },

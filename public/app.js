@@ -1,5 +1,5 @@
 /* eslint no-unused-vars: ["warn"] guard-for-in: "off" */
-/* global THREE window document requestAnimationFrame Stats dat $*/
+/* global THREE window document requestAnimationFrame Stats dat $ URIUtil*/
 
 var scene;
 var camera;
@@ -7,13 +7,19 @@ var renderer;
 var stats;
 var vn;
 var url = "localhost/volcano.csv";
+var query;
 
 $.ajax( {
   url: url,
   cache: false,
   type: 'GET',
+  async: false,
   success: function( data ) {
-    vn = $.csv.toObjects( data );
+    var v = $.csv.toObjects( data );
+    vn = {};
+    for( var i = 0; i < v.length; i++ ) {
+      vn[v[i].name] = v[i].lat + "," + v[i].long;
+    }
   },
   error: function( xhr, status, err ) {
     console.error( this, status, err.toString() );
@@ -44,24 +50,62 @@ function init() {
   // var cube = new THREE.Mesh(geometry, material);
   // scene.add(cube);
 
+  // ========================================= BOTTOM SQUARS ========================================= //
   var geometry = new THREE.BoxGeometry( 20, 20, 20 );
+  var object = new THREE.Mesh( geometry, new THREE.MeshLambertMaterial( {
+    color: Math.random() * 0xffffff
+  } ) );
+  var object2 = new THREE.Mesh( geometry, new THREE.MeshLambertMaterial( {
+    color: Math.random() * 0xffffff
+  } ) );
+  var object3 = new THREE.Mesh( geometry, new THREE.MeshLambertMaterial( {
+    color: Math.random() * 0xffffff
+  } ) );
+  var object4 = new THREE.Mesh( geometry, new THREE.MeshLambertMaterial( {
+    color: Math.random() * 0xffffff
+  } ) );
 
-  // ============================= WHERE THE OBJECTS ARE ADDED ============================= //
-  for( var i = 0; i < 1500; i++ ) {
-    var object = new THREE.Mesh( geometry, new THREE.MeshLambertMaterial( {
-      color: Math.random() * 0xffffff
-    } ) );
+  object.position.x = 40;
+  object.position.y = -100;
+  object.position.z = 40;
+  scene.add( object );
 
-    object.position.x = Math.random() * 800 - 400;
-    object.position.y = Math.random() * 800 - 400;
-    object.position.z = Math.random() * 800 - 400;
+  object2.position.x = -40;
+  object2.position.y = -100;
+  object2.position.z = 40;
+  scene.add( object2 );
 
-    scene.add( object );
-  }
+  object3.position.x = 40;
+  object3.position.z = -40;
+  object3.position.y = -100;
+  scene.add( object3 );
 
-  // ============================= PLANE ============================= //
-  var planeGeometry = new THREE.BoxGeometry( 50, 0.01, 50 );
-  planeGeometry.scale( 20, 1, 20 );
+  object4.position.x = -40;
+  object4.position.y = -100;
+  object4.position.z = -40;
+  scene.add( object4 );
+
+  var origin = new THREE.BoxGeometry( 1, 1, 1 );
+  var originObject = new THREE.Mesh( origin, new THREE.MeshLambertMaterial( {
+    color: Math.random() * 0xffffff
+  } ) );
+  scene.add( originObject );
+
+  // for( var i = 0; i < 1500; i++ ) {
+  //   var object = new THREE.Mesh( geometry, new THREE.MeshLambertMaterial( {
+  //     color: Math.random() * 0xffffff
+  //   } ) );
+  //
+  //   object.position.x = Math.random() * 800 - 400;
+  //   object.position.y = Math.random() * 800 - 400;
+  //   object.position.z = Math.random() * 800 - 400;
+  //
+  //   scene.add( object );
+  // }
+
+  // ========================================= PLANE ========================================= //
+  var planeGeometry = new THREE.SphereGeometry( 100, 50, 50 );
+  planeGeometry.scale( 1, .01, 1 );
   var planeMaterial = new THREE.LineBasicMaterial( {
     color: 65532,
     opacity: 0.25,
@@ -72,6 +116,7 @@ function init() {
 
   scene.add( planeMesh );
 
+  // ========================================= LIGHTS ========================================= //
   scene.add( new THREE.AmbientLight( 0xffffff, 0.3 ) );
 
   var light = new THREE.DirectionalLight( 0xffffff, 0.35 );
@@ -80,15 +125,15 @@ function init() {
 
   camera.position.z = 5;
 
-  // ============================= STATS MONITOR ============================= //
+  // ========================================= STATS MONITOR ========================================= //
   stats = new Stats();
   stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
   document.body.appendChild( stats.dom );
 
-  // ============================= GUI ============================= //
+  // ========================================= GUI ========================================= //
   var TextObject = {
-    Latitude: 0,
-    Longitude: 0,
+    Latitude: 34.5,
+    Longitude: 131.6,
     startDate: 2000,
     endDate: 2010,
     startMonth: 1,
@@ -101,8 +146,38 @@ function init() {
     endMin: 0,
     startSec: 0,
     endSec: 0,
+    play: 0,
+    radiusKM: 100,
+    VolcanoName: "34.5,131.6",
+    dateGet: function( val ) {
+      if( val === 0 )
+        return this.startDate.toString() + "%2D" + this.startMonth.toString() + "%2D" + this.startDay.toString();
+      return this.endDate.toString() + "%2D" + this.endMonth.toString() + "%2D" + this.endDay.toString();
+    },
+    timeGet: function( val ) {
+      if( val === 0 )
+        return this.startHour.toString() + "%3A" + this.startMin.toString() + "%3A" + this.startSec.toString();
+      return this.endHour.toString() + "%3A" + this.endMin.toString() + "%3A" + this.endSec.toString();
+    },
     sendQuery: function() {
-      console.log( "clicked" );
+      var s = "&starttime=" + this.dateGet( 0 ).toString() + "T" + this.timeGet( 0 ).toString() +
+      "&endtime=" + this.dateGet( 1 ).toString() + "T" + this.timeGet( 1 ) +
+      "&latitude=" + this.Latitude + "&longitude=" + this.Longitude + "&maxradiuskm=" + this.radiusKM;
+      console.log( s );
+      s = "http://earthquake.usgs.gov/fdsnws/event/1/query?format=csv" + s;
+      console.log( s );
+      $.ajax( {
+        url: s,
+        type: 'GET',
+        async: false,
+        success: function( data ) {
+          query = $.csv.toObjects( data );
+          console.log( query );
+        },
+        error: function( xhr, status, err ) {
+          console.error( this, status, err.toString() );
+        }.bind( this )
+      } );
     }
   };
 
@@ -123,11 +198,18 @@ function init() {
   var gui = new dat.GUI();
   var text = TextObject;
 
+  // ==== QUERY FOLDER ==== //
   var dataFolder = gui.addFolder( 'Data Query' );
 
   // == latitude == //
   dataFolder.add( text, "Latitude", -90, 90 ).step( 0.01 ).listen();
   dataFolder.add( text, "Longitude", -180, 180 ).step( 0.01 ).listen();
+  dataFolder.add( text, "VolcanoName", vn ).onChange( function( value ) {
+    var temp = value.split( "," );
+    text.Latitude = Number( temp[0] );
+    text.Longitude = Number( temp[1] );
+  } );
+  dataFolder.add( text, "radiusKM" ).min( 0 );
 
   // == YEAR == //
   var yearFolder = dataFolder.addFolder( 'Year' );
@@ -234,7 +316,13 @@ function init() {
 
   dataFolder.add( text, 'sendQuery' );
 
-  // ============================= EVENTS ============================= //
+  // ==== ANIMATION CONTROLLER FOLDER ==== //
+  var animFolder = gui.addFolder( 'Animation' );
+
+  // == Controls == //
+  animFolder.add( text, 'play' );
+
+  // ========================================= EVENTS ========================================= //
   window.addEventListener( 'resize', onResize, false );
 }
 
