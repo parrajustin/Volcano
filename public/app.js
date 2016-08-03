@@ -8,8 +8,10 @@ var stats;
 var vn; // volcano name and lat/long holder
 var url = "/volcano.csv";
 var query; // earthquake data
-var queryGeom = [];
 var originObject; // object to show elevatino of the volcano
+
+var currentEQ = []; // Array of currently displayed earthquakes
+var lastIndex;
 
 $.ajax( {
   url: url,
@@ -30,6 +32,15 @@ $.ajax( {
 
 init();
 animate();
+
+
+
+
+
+
+
+
+
 
 /**
  * The initial function that setups the scene
@@ -116,9 +127,9 @@ function init() {
   planeGeometry.scale( 1, .01, 1 );
   var planeMaterial = new THREE.LineBasicMaterial( {
     color: 65532,
-    opacity: 0.25,
+    opacity: 0.15,
     transparent: true,
-    alphaTest: 0.25
+    alphaTest: 0.00
   } );
   var planeMesh = new THREE.Mesh( planeGeometry, planeMaterial );
 
@@ -158,20 +169,29 @@ function init() {
     play: 0,
     radiusDegrees: 5,
     VolcanoName: "34.5,131.6,571",
-    dateGet: function( val ) {
+    htmlGET: function( val ) {
       if( val === 0 )
-        return this.startDate.toString() + "%2D" + this.startMonth.toString() + "%2D" + this.startDay.toString();
-      return this.endDate.toString() + "%2D" + this.endMonth.toString() + "%2D" + this.endDay.toString();
+        return this.startDate.toString() + "%2D" + this.startMonth.toString() + "%2D" + this.startDay.toString() + "T" + this.startHour.toString() +
+          "%3A" + this.startMin.toString() + "%3A" + this.startSec.toString();
+      return this.endDate.toString() + "%2D" + this.endMonth.toString() + "%2D" + this.endDay.toString() + "T" + this.endHour.toString() + "%3A" +
+        this.endMin.toString() + "%3A" + this.endSec.toString();
     },
-    timeGet: function( val ) {
+    pad: function( val ) {
+      if( val.toString().length === 1 )
+        return( "0" + val.toString() );
+      return val;
+    },
+    nonHTMLGET: function( val ) {
       if( val === 0 )
-        return this.startHour.toString() + "%3A" + this.startMin.toString() + "%3A" + this.startSec.toString();
-      return this.endHour.toString() + "%3A" + this.endMin.toString() + "%3A" + this.endSec.toString();
+        return this.startDate.toString() + "-" + this.pad( this.startMonth ) + "-" + this.pad( this.startDay ) + "T" + this.pad( this.startHour ) +
+          ":" + this.pad( this.startMin ) + ":" + this.pad( this.startSec ) + ".000Z";
+      return this.endDate.toString() + "-" + this.pad( this.endMonth ) + "-" + this.pad( this.endDay ) + "T" + this.pad( this.endHour ) + ":" +
+        this.pad( this.endMin ) + ":" + this.pad( this.endSec ) + ".000Z";
     },
     sendQuery: function() {
       $( ".loading" ).css( "display", "block" );
-      var s = "&starttime=" + this.dateGet( 0 ).toString() + "T" + this.timeGet( 0 ).toString() +
-      "&endtime=" + this.dateGet( 1 ).toString() + "T" + this.timeGet( 1 ) +
+      var s = "&starttime=" + this.htmlGET( 0 ).toString() +
+      "&endtime=" + this.htmlGET( 1 ) +
       "&latitude=" + this.Latitude + "&longitude=" + this.Longitude + "&maxradius=" + this.radiusDegrees;
       console.log( s );
       s = "http://earthquake.usgs.gov/fdsnws/event/1/query?format=csv" + s;
@@ -185,12 +205,46 @@ function init() {
           query = $.csv.toObjects( data );
           // TODO get rid of this console.log
           console.log( query );
-          createEarthquakes( ref );
+
+          var dateS = new Date( ref.nonHTMLGET( 0 ).toString() );
+          var dateE = new Date( ref.nonHTMLGET( 1 ).toString() );
+
+          console.log( ref.psRef );
+
+          ref.playEnabled = true;
+          ref.playEnabledHidden = true;
+          ref.playStart = dateS.getTime();
+          ref.playEnd = dateE.getTime();
+          ref.psRef.__max = ref.playEnd;
+          ref.psRef.__min = ref.playStart;
+          ref.time = ref.playStart;
+          ref.timeTextCurrent = dateS;
+
+          lastIndex = query.length;
+          cleanGeo();
+          handleEQ( ref, dateS.getTime() );
         },
         error: function( xhr, status, err ) {
           console.error( this, status, err.toString() );
         }.bind( this )
       } );
+    },
+
+
+
+    peRef: null, // reference to button for enabled
+    playEnabled: false,
+    playEnabledHidden: false,
+    psRef: null, // reference to slider
+    playStart: 0,
+    playEnd: 0,
+    playLife: 2419200000,
+    time: 0,
+    timeText: "YYYY-MM-DDTHH:MM:SSSZ",
+    timeTextCurrent: "YYYY-MM-DDTHH:MM:SSSZ",
+    step: function() {
+      cleanGeo();
+      handleEQ( this, this.time );
     }
   };
 
@@ -208,7 +262,7 @@ function init() {
     return 30;
   };
 
-  var gui = new dat.GUI();
+  var gui = new dat.GUI( {width: 400} );
   var text = TextObject;
 
   // ==== QUERY FOLDER ==== //
@@ -335,62 +389,252 @@ function init() {
   var animFolder = gui.addFolder( 'Animation' );
 
   // == Controls == //
-  animFolder.add( text, 'play' );
+  text.peRef = animFolder.add( text, 'playEnabled' );
+  text.peRef.__onChange = function( value ) {
+    text.playEnabled = text.playEnabledHidden;
+  };
+  text.peRef.listen();
+
+  text.psRef = animFolder.add( text, 'time', text.playStart, text.playEnd );
+  text.psRef.__onChange = function( value ) {
+    var date = new Date( value );
+    text.timeTextCurrent = date.toString();
+    text.timeText = date.getFullYear() + "-" + text.pad( date.getMonth() ) + "-" + text.pad( date.getDate() ) + "T" + text.pad( date.getHours() ) +
+      ":" + text.pad( date.getMinutes() ) + ":" + text.pad( date.getSeconds() ) + "Z";
+  };
+  text.psRef.listen();
+
+  animFolder.add( text, 'timeTextCurrent' ).listen();
+  animFolder.add( text, 'timeText' ).onChange( function( value ) {
+    var date = new Date( value );
+    if( date.toString() !== "Invalid Date" ) {
+      text.timeTextCurrent = date.toString();
+      text.time = date.getTime();
+    }
+  } ).listen();
+
+  animFolder.add( text, 'playLife' );
+  animFolder.add( text, 'step' );
 
   // ========================================= EVENTS ========================================= //
   window.addEventListener( 'resize', onResize, false );
 }
 
+
+
+
+
+
+
+
+
+
 /**
  * This funciton will remove everyobject in the geo query array from the scene
  */
 function cleanGeo() {
-  for( var i = 0; i < queryGeom.length; i++ ) {
-    var temp = queryGeom[i];
+  console.log( "" );
+  console.log( "CLEAN GEO " );
+  for( var i = 0; i < currentEQ.length; i++ ) {
+    var temp = currentEQ[i];
     scene.remove( temp );
     temp.geometry.dispose();
   }
-  queryGeom = [];
+  currentEQ = [];
 }
 
+
+
+
+
+
+
+
+
+
 /**
- * This function's purpose is to create the objects for the three.js canvas
- * @param  {Object} ref contains all the values the user inputs into the dat gui
+ * Binary search method
+ * @param  {ms} mili time to search for
+ * @return {int}      index of closes time to this
  */
-function createEarthquakes( ref ) {
+function binaryIndexOf( mili ) {
+  var minIndex = 0;
+  var maxIndex = query.length - 1;
+  var currentIndex;
+  var currentElement;
+  var date;
+
+  while( minIndex <= maxIndex ) {
+    currentIndex = ( minIndex + maxIndex ) / 2 | 0;
+    date = new Date( query[currentIndex].time );
+    currentElement = date.getTime();
+
+    if( currentElement < mili ) {
+      maxIndex = currentIndex - 1;
+    } else if( currentElement > mili ) {
+      minIndex = currentIndex + 1;
+    } else {
+      return currentIndex;
+    }
+  }
+
+  return currentIndex;
+}
+
+
+
+
+
+
+
+
+
+
+/**
+ * This function's purpose is to handle the array of currently rendered earthquakes
+ * @param  {Object} ref contains all the values the user inputs into the dat gui
+ * @param  {ms} time current time
+ * @param  {ms} check just a check to run the else statement to render all earthquakes
+ */
+function handleEQ( ref, time, check ) {
   // EACH DEGREE IS 111km
 
-  cleanGeo();
-  console.log( 'base : ' + ref.radiusDegrees + " " + ref.Latitude + " " + ref.Longitude );
+  // cleanGeo();
+  // if( time !== undefined && time.start !== undefined ) {
+  //
+  // }
 
-  var geometry = new THREE.SphereGeometry( 1, 50, 50 );
-  for( var i = ( query.length - 1 ); i >= 0; i-- ) {
-    var mat = new THREE.LineBasicMaterial( {
-      color: Math.random() * 0xffffff,
-      opacity: 1.0,
-      transparent: true,
-      alphaTest: 0
-    } );
-    var earthquake = new THREE.Mesh( geometry, mat );
+  console.log( "" );
+  console.log( "==== handleEQ called ====" );
+
+  var xOrigin;
+  var difX;
+  var max;
+  var xAcutal;
+
+  var zOrigin;
+  var difZ;
+  var zAcutal;
+
+  var yOrigin;
+  var difY;
+  var maxY;
+  var yAcutal;
+
+  if( time !== undefined ) {
+    // ==== CHECK OLD EQS ==== //
+    console.log( "= inside time check =" );
+    if( currentEQ.length !== 0 ) {
+      console.log( "= inside current check =" + currentEQ.length );
+      // == get rid of old no longer relevaent EQS == //
+      var dTemp = new Date( query[lastIndex + currentEQ.length - 1].time );
+      while( time - dTemp.getTime() > ref.playLife ) {
+        var temp = currentEQ.shift();
+        scene.remove( temp );
+        temp.geometry.dispose();
+        if( currentEQ.length === 0 )
+          break;
+        dTemp = new Date( query[lastIndex + currentEQ.length - 1].time );
+      }
+      console.log( "after: " + currentEQ );
+
+      // == create temp array of new eqs == //
+      var tempEQ = [];
+      var z;
+      for( z = 0; z < currentEQ.length; z++ ) {
+        dTemp = new Date( query[lastIndex + currentEQ.length - 1 + z].time );
+        var matTemp = new THREE.LineBasicMaterial( {
+          color: Math.random() * 0xff0000,
+          opacity: ( 1.0 - ( time - dTemp.getTime() ) / ref.playLife ),
+          transparent: true,
+          alphaTest: 0
+        } );
+        var earthquakeTemp = new THREE.Mesh( currentEQ.geometry.clone(), matTemp );
+        tempEQ.push( earthquakeTemp );
+      }
+      cleanGeo();
+      currentEQ = tempEQ;
+
+      // == now initialize all those temp objects == //
+      for( z = 0; z < tempEQ.length; z++ ) {
+        scene.add( tempEQ[z] );
+      }
+    }
+    console.log( "test3" );
+
+    // ==== CREATE NEW EQS ==== //
+    var startIndex = binaryIndexOf( time );
+    if( startIndex > lastIndex )
+      lastIndex = query.length;
+
+    var arrayTemp = [];
+    var shape = new THREE.SphereGeometry( .5, 50, 50 );
+    for( var y = startIndex; y < lastIndex; y++ ) {
+      var tempDate = new Date( query[y].time );
+      if( ( time - tempDate.getTime() ) > ref.playLife )
+        break;
+
+      var shapeTemp = new THREE.LineBasicMaterial( {
+        color: Math.random() * 0xff0000,
+        opacity: ( 1.0 - ( time - tempDate.getTime() ) / ref.playLife ),
+        transparent: true,
+        alphaTest: 0
+      } );
+      var shapeMesh = new THREE.Mesh( shape, shapeTemp );
+
+      xOrigin = ref.Latitude;
+      difX = query[y].latitude - xOrigin;
+      max = ref.radiusDegrees;
+      xAcutal = ( difX < 0 ? -1 : 1 ) * ( Math.abs( difX ) * 100 / max );
+
+      zOrigin = ref.Longitude;
+      difZ = query[y].longitude - zOrigin;
+      zAcutal = ( difZ < 0 ? -1 : 1 ) * ( Math.abs( difZ ) * 100 / max );
+
+      yOrigin = 0;
+      difY = query[y].depth - yOrigin;
+      maxY = 6000;
+      yAcutal = ( difY < 0 ? -1 : 1 ) * ( Math.abs( difY ) * 100 / maxY );
+
+      shapeMesh.position.x = xAcutal;
+      shapeMesh.position.z = zAcutal;
+      shapeMesh.position.y = yAcutal;
+
+      arrayTemp.push( shapeMesh );
+      scene.add( shapeMesh );
+    }
+
+    while( arrayTemp.length > 0 )
+      currentEQ.push( arrayTemp.pop() );
+  } else if( check !== undefined ) {
+    var geometry = new THREE.SphereGeometry( .5, 50, 50 );
+    for( var i = ( query.length - 1 ); i >= 0; i-- ) {
+      var mat = new THREE.LineBasicMaterial( {
+        color: Math.random() * 0xffffff,
+        opacity: 1.0,
+        transparent: true,
+        alphaTest: 0
+      } );
+      var earthquake = new THREE.Mesh( geometry, mat );
 
     // TODO Compress these math equation
-    var xOrigin = ref.Latitude;
-    var difX = query[i].latitude - xOrigin;
-    var max = ref.radiusDegrees;
-    var xAcutal = ( difX < 0 ? -1 : 1 ) * ( Math.abs( difX ) * 100 / max );
+      xOrigin = ref.Latitude;
+      difX = query[i].latitude - xOrigin;
+      max = ref.radiusDegrees;
+      xAcutal = ( difX < 0 ? -1 : 1 ) * ( Math.abs( difX ) * 100 / max );
 
-    var zOrigin = ref.Longitude;
-    var difZ = query[i].longitude - zOrigin;
-    var zAcutal = ( difZ < 0 ? -1 : 1 ) * ( Math.abs( difZ ) * 100 / max );
+      zOrigin = ref.Longitude;
+      difZ = query[i].longitude - zOrigin;
+      zAcutal = ( difZ < 0 ? -1 : 1 ) * ( Math.abs( difZ ) * 100 / max );
 
-    var yOrigin = 0;
-    var difY = query[i].depth - yOrigin;
-    var maxY = 6000;
-    var yAcutal = ( difY < 0 ? -1 : 1 ) * ( Math.abs( difY ) * 100 / maxY );
+      yOrigin = 0;
+      difY = query[i].depth - yOrigin;
+      maxY = 6000;
+      yAcutal = ( difY < 0 ? -1 : 1 ) * ( Math.abs( difY ) * 100 / maxY );
 
-    earthquake.position.x = xAcutal;
-    earthquake.position.z = zAcutal;
-    earthquake.position.y = yAcutal;
+      earthquake.position.x = xAcutal;
+      earthquake.position.z = zAcutal;
+      earthquake.position.y = yAcutal;
 
     // if( xAcutal > 100 || zAcutal > 100 ) {
     //   console.log( xAcutal + " " + zAcutal );
@@ -398,8 +642,9 @@ function createEarthquakes( ref ) {
     //   console.log( query[i].longitude );
     // }
 
-    scene.add( earthquake );
-    queryGeom.push( earthquake );
+      scene.add( earthquake );
+      queryGeom.push( earthquake );
+    }
   }
 
   var difV = ref.Elevation;
@@ -410,7 +655,17 @@ function createEarthquakes( ref ) {
 
   renderer.render( scene, camera );
   $( ".loading" ).css( "display", "none" );
+  // console.log( binaryIndexOf( 946898715809 ) ); // 902 "2003-05-09T11:41:59.960Z" 1052480519960 1053192436220
 }
+
+
+
+
+
+
+
+
+
 
 /**
  * Window resize event
@@ -422,6 +677,15 @@ function onResize() {
   renderer.setSize( window.innerWidth, window.innerHeight );
 }
 
+
+
+
+
+
+
+
+
+
 /**
  * the animate function
  */
@@ -431,6 +695,15 @@ function animate() {
   render();
   stats.update();
 }
+
+
+
+
+
+
+
+
+
 
 /**
  * This will create a loop that causes the renderer to draw the scene 60 times per second

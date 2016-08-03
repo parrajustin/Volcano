@@ -5,6 +5,7 @@ module.exports = {
     "no-trailing-spaces": "off",
     "space-in-parens": ["error", "always"],
     "array-bracket-spacing": ["error", "never"],
+    "no-multiple-empty-lines": ["error", { "max": 10, "maxEOF": 1 }],
     "keyword-spacing": ["error", {
       "before": true,
       "after": false,
