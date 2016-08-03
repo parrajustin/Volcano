@@ -12,6 +12,12 @@ var originObject; // object to show elevatino of the volcano
 
 var currentEQ = []; // Array of currently displayed earthquakes
 var lastIndex;
+var text;
+var oldTimeSet;
+var timeSet;
+var deltaTime;
+var globalDate = new Date();
+var deltaTempDate;
 
 $.ajax( {
   url: url,
@@ -146,7 +152,7 @@ function init() {
 
   // ========================================= STATS MONITOR ========================================= //
   stats = new Stats();
-  stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+  stats.showPanel( 1 ); // 0: fps, 1: ms, 2: mb, 3+: custom
   document.body.appendChild( stats.dom );
 
   // ========================================= GUI ========================================= //
@@ -243,8 +249,24 @@ function init() {
     timeText: "YYYY-MM-DDTHH:MM:SSSZ",
     timeTextCurrent: "YYYY-MM-DDTHH:MM:SSSZ",
     step: function() {
+      if( !this.playEnabledHidden )
+        return;
+
+      lastIndex = query.length;
       cleanGeo();
       handleEQ( this, this.time );
+    },
+    msPerSecond: 302400000,
+    playButton: function() {
+      if( !this.playEnabledHidden )
+        return;
+
+      handleEQ( this, this.time );
+      this.playRunning = true;
+    },
+    playRunning: false,
+    stopButton: function() {
+      this.playRunning = false;
     }
   };
 
@@ -263,7 +285,8 @@ function init() {
   };
 
   var gui = new dat.GUI( {width: 400} );
-  var text = TextObject;
+  // TODO since text object is now global I need to replace all instances of it with the global
+  text = TextObject;
 
   // ==== QUERY FOLDER ==== //
   var dataFolder = gui.addFolder( 'Data Query' );
@@ -415,6 +438,9 @@ function init() {
 
   animFolder.add( text, 'playLife' );
   animFolder.add( text, 'step' );
+  animFolder.add( text, 'msPerSecond' ).min( 0 );
+  animFolder.add( text, 'playButton' );
+  animFolder.add( text, 'stopButton' );
 
   // ========================================= EVENTS ========================================= //
   window.addEventListener( 'resize', onResize, false );
@@ -525,7 +551,7 @@ function handleEQ( ref, time, check ) {
     // ==== CHECK OLD EQS ==== //
     console.log( "= inside time check =" );
     if( currentEQ.length !== 0 ) {
-      console.log( "= inside current check =" + currentEQ.length );
+      console.log( "= inside current check =" + currentEQ.length + " " + lastIndex + " " + query.length );
       // == get rid of old no longer relevaent EQS == //
       var dTemp = new Date( query[lastIndex + currentEQ.length - 1].time );
       while( time - dTemp.getTime() > ref.playLife ) {
@@ -536,29 +562,30 @@ function handleEQ( ref, time, check ) {
           break;
         dTemp = new Date( query[lastIndex + currentEQ.length - 1].time );
       }
-      console.log( "after: " + currentEQ );
+      console.log( "after: " + currentEQ.length );
 
       // == create temp array of new eqs == //
-      var tempEQ = [];
+      // var tempEQ = [];
       var z;
       for( z = 0; z < currentEQ.length; z++ ) {
-        dTemp = new Date( query[lastIndex + currentEQ.length - 1 + z].time );
+        dTemp = new Date( query[lastIndex + currentEQ.length - 1 - z].time );
         var matTemp = new THREE.LineBasicMaterial( {
-          color: Math.random() * 0xff0000,
+          color: 0xff0000,
           opacity: ( 1.0 - ( time - dTemp.getTime() ) / ref.playLife ),
           transparent: true,
           alphaTest: 0
         } );
-        var earthquakeTemp = new THREE.Mesh( currentEQ.geometry.clone(), matTemp );
-        tempEQ.push( earthquakeTemp );
+        currentEQ[z].material = matTemp;
+        // var earthquakeTemp = new THREE.Mesh( currentEQ[z].geometry.clone(), matTemp );
+        // tempEQ.push( earthquakeTemp );
       }
-      cleanGeo();
-      currentEQ = tempEQ;
+      // cleanGeo();
+      // currentEQ = tempEQ;
 
       // == now initialize all those temp objects == //
-      for( z = 0; z < tempEQ.length; z++ ) {
-        scene.add( tempEQ[z] );
-      }
+      // for( z = 0; z < tempEQ.length; z++ ) {
+      //   scene.add( tempEQ[z] );
+      // }
     }
     console.log( "test3" );
 
@@ -568,14 +595,16 @@ function handleEQ( ref, time, check ) {
       lastIndex = query.length;
 
     var arrayTemp = [];
-    var shape = new THREE.SphereGeometry( .5, 50, 50 );
-    for( var y = startIndex; y < lastIndex; y++ ) {
+    // var shape = new THREE.SphereGeometry( .5, 50, 50 );
+    var y;
+    for( y = startIndex; y < lastIndex; y++ ) {
+      var shape = new THREE.SphereGeometry( query[y].mag / 10 * 2, 50, 50 );
       var tempDate = new Date( query[y].time );
       if( ( time - tempDate.getTime() ) > ref.playLife )
         break;
 
       var shapeTemp = new THREE.LineBasicMaterial( {
-        color: Math.random() * 0xff0000,
+        color: 0xff0000,
         opacity: ( 1.0 - ( time - tempDate.getTime() ) / ref.playLife ),
         transparent: true,
         alphaTest: 0
@@ -600,12 +629,15 @@ function handleEQ( ref, time, check ) {
       shapeMesh.position.z = zAcutal;
       shapeMesh.position.y = yAcutal;
 
-      arrayTemp.push( shapeMesh );
+      arrayTemp.unshift( shapeMesh );
       scene.add( shapeMesh );
     }
 
-    while( arrayTemp.length > 0 )
-      currentEQ.push( arrayTemp.pop() );
+    lastIndex = startIndex;
+
+    currentEQ = currentEQ.concat( arrayTemp );
+    // while( arrayTemp.length > 0 )
+    //   currentEQ.push( arrayTemp.shift() );
   } else if( check !== undefined ) {
     var geometry = new THREE.SphereGeometry( .5, 50, 50 );
     for( var i = ( query.length - 1 ); i >= 0; i-- ) {
@@ -643,7 +675,7 @@ function handleEQ( ref, time, check ) {
     // }
 
       scene.add( earthquake );
-      queryGeom.push( earthquake );
+      currentEQ.push( earthquake );
     }
   }
 
@@ -653,7 +685,6 @@ function handleEQ( ref, time, check ) {
 
   originObject.position.y = vAcutal;
 
-  renderer.render( scene, camera );
   $( ".loading" ).css( "display", "none" );
   // console.log( binaryIndexOf( 946898715809 ) ); // 902 "2003-05-09T11:41:59.960Z" 1052480519960 1053192436220
 }
@@ -692,6 +723,7 @@ function onResize() {
 function animate() {
   requestAnimationFrame( animate, renderer.domElement );
 
+
   render();
   stats.update();
 }
@@ -709,5 +741,18 @@ function animate() {
  * This will create a loop that causes the renderer to draw the scene 60 times per second
  */
 function render() {
+  oldTimeSet = timeSet;
+  globalDate = new Date();
+  timeSet = globalDate.getTime();
+  deltaTime = ( timeSet - oldTimeSet ) / 1000;
+
+  if( text.playRunning ) {
+    console.log( text.time + " " + deltaTime + " " + globalDate.getTime() + " " + ( deltaTime * text.msPerSecond ) );
+    text.time += deltaTime * text.msPerSecond;
+    deltaTempDate = new Date( text.time );
+    text.timeTextCurrent = deltaTempDate.toString();
+    handleEQ( text, text.time );
+  }
+
   renderer.render( scene, camera );
 }
