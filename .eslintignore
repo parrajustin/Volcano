@@ -5,3 +5,4 @@ public/OrbitControls.js
 public/dat.gui.min.js
 public/jquery.csv.js
 public/*.min.js
+public/*.bin

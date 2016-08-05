@@ -1,0 +1,41 @@
+<Map srs="+proj=utm +ellps=WGS84 +datum=WGS84 +units=m +no_defs">
+
+  <Style name="color relief style">
+    <Rule>
+      <RasterSymbolizer mode="normal" />
+    </Rule>
+  </Style>
+  <Style name="hillshade style">
+    <Rule>
+      <RasterSymbolizer opacity="0.3" mode="multiply" scaling="bilinear" />
+    </Rule>
+  </Style>
+  <Style name="slopeshade style">
+    <Rule>
+      <RasterSymbolizer opacity="0.1" mode="multiply" scaling="bilinear" />
+    </Rule>
+  </Style>
+
+  <Layer name="color relief">
+    <StyleName>color relief style</StyleName>
+    <Datasource>
+      <Parameter name="type">gdal</Parameter>
+      <Parameter name="file">clippedRelief.tif</Parameter>
+    </Datasource>
+  </Layer>
+  <Layer name="hillshade">
+    <StyleName>hillshade style</StyleName>
+    <Datasource>
+      <Parameter name="type">gdal</Parameter>
+      <Parameter name="file">clippedHillShade.tif</Parameter>
+    </Datasource>
+  </Layer>
+  <Layer name="slopeshade">
+    <StyleName>hillshade style</StyleName>
+    <Datasource>
+      <Parameter name="type">gdal</Parameter>
+      <Parameter name="file">clippedSlopeShade.tif</Parameter>
+    </Datasource>
+  </Layer>
+
+</Map>
